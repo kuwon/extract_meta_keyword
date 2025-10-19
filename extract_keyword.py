@@ -33,7 +33,7 @@ def _clean_description(desc: object) -> str:
     return ""
 
 def load_tables_df(tables_xlsx: str) -> pd.DataFrame:
-    df = pd.read_excel(tables_xlsx)
+    df = pd.read_excel(tables_xlsx, engine="openpyxl")
     missing = [c for c in NEEDED_TABLE_COLS if c not in df.columns]
     if missing:
         raise ValueError(f"[tables] 필요한 컬럼이 없습니다: {missing}")
@@ -324,6 +324,8 @@ def main(
     df_cols, df_alts = build_column_lists(columns_xlsx)
     merged = join_table_and_columns(tables_df, df_cols, df_alts)
 
+    print(merged.head())
+    return
     # 기본 지시문(원하면 바꾸세요)
     if not user_instruction:
         user_instruction = (
@@ -394,26 +396,31 @@ python make_new_data.py \
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Tables+Columns → GPT 파이프라인")
-    parser.add_argument("--tables", required=True, help="첫 번째 엑셀 (테이블 메타)")
-    parser.add_argument("--columns", required=True, help="두 번째 엑셀 (컬럼 메타)")
-    parser.add_argument("--out", default="out", help="출력 디렉토리")
-    parser.add_argument("--model", default="gpt-4.1-mini", help="OpenAI 모델명")
-    parser.add_argument("--max_tokens_per_batch", type=int, default=8000)
-    parser.add_argument("--max_items_per_batch", type=int, default=20)
-    parser.add_argument("--instruction", default=None, help="사용자 지시문(없으면 기본값)")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Tables+Columns → GPT 파이프라인")
+    # parser.add_argument("--tables", required=True, help="첫 번째 엑셀 (테이블 메타)")
+    # parser.add_argument("--columns", required=True, help="두 번째 엑셀 (컬럼 메타)")
+    # parser.add_argument("--out", default="out", help="출력 디렉토리")
+    # parser.add_argument("--model", default="gpt-4.1-mini", help="OpenAI 모델명")
+    # parser.add_argument("--max_tokens_per_batch", type=int, default=8000)
+    # parser.add_argument("--max_items_per_batch", type=int, default=20)
+    # parser.add_argument("--instruction", default=None, help="사용자 지시문(없으면 기본값)")
+    # args = parser.parse_args()
 
-    # 키 체크
-    if "OPENAI_API_KEY" not in os.environ:
-        print("[WARN] OPENAI_API_KEY가 설정되지 않았습니다. `export OPENAI_API_KEY=...`")
+    args = {
+        "tables":"./data/1019_IT-META(table).xlsx",
+        "columns":"./data/1019_IT-META(columns).csv",
+        "out": "./output"
+    }
+    ## 키 체크
+    #if "OPENAI_API_KEY" not in os.environ:
+    #    print("[WARN] OPENAI_API_KEY가 설정되지 않았습니다. `export OPENAI_API_KEY=...`")
     main(
-        tables_xlsx=args.tables,
-        columns_xlsx=args.columns,
-        out_dir=args.out,
-        model=args.model,
-        max_tokens_per_batch=args.max_tokens_per_batch,
-        max_items_per_batch=args.max_items_per_batch,
-        user_instruction=args.instruction,
+        tables_xlsx=args.get('tables'),
+        columns_xlsx=args.get('columns'),
+        out_dir=args.get('out'),
+        model=args.get('model'),
+        max_tokens_per_batch=args.get('max_tokens_per_batch'),
+        max_items_per_batch=args.get('max_items_per_batch'),
+        user_instruction=args.get('instructions'),
     )
 
