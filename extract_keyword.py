@@ -18,6 +18,34 @@ try:
 except Exception:
     _HAS_OPENAI = False
 
+# ------------------------
+# Safe readers
+# ------------------------
+def safe_read_excel(path: str) -> pd.DataFrame:
+    """엑셀을 안전하게 읽기 (.xlsx=openpyxl, .xls=xlrd)"""
+    ext = Path(path).suffix.lower()
+    if ext == ".xlsx":
+        return pd.read_excel(path, engine="openpyxl")
+    elif ext == ".xls":
+        return pd.read_excel(path, engine="xlrd")
+    # 그 외 확장자라도 엑셀일 수 있으니 openpyxl 시도
+    return pd.read_excel(path, engine="openpyxl")
+
+def safe_read_columns(path: str) -> pd.DataFrame:
+    """
+    컬럼 메타 로더: CSV 또는 엑셀 자동 판별
+    기대 컬럼: table_name (필수), column_name (선택), alt_name (선택)
+    """
+    ext = Path(path).suffix.lower()
+    if ext == ".csv":
+        df = pd.read_csv(path, dtype=str).fillna("")
+    else:
+        df = safe_read_excel(path)
+        # 숫자/NaN 방지
+        for c in df.columns:
+            df[c] = df[c].astype(str)
+        df = df.fillna("")
+    return df
 
 # =========================================
 # 1) 로딩 & 정제: 테이블 메타 (첫 번째 엑셀)
@@ -84,8 +112,9 @@ def build_column_lists(columns_xlsx: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
       - df_cols:  table_name -> [column_name] 리스트
       - df_alts:  table_name -> [alt_name]    리스트
     """
-    df = pd.read_excel(columns_xlsx)
-    df = _normalize_columns_df(df)
+    
+    raw = safe_read_columns(columns_path)
+    df = _normalize_columns_df(raw)
 
     # 원 컬럼명 리스트 (빈 문자열은 제외)
     df_cols = (
