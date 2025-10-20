@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import json
 import math
 import time
@@ -55,9 +56,13 @@ NEEDED_TABLE_COLS = ["테이블영문명", "테이블국문명", "설명", "키�
 def _clean_description(desc: object) -> str:
     """여러 어절(공백 1개 이상)이면 유지, 아니면 빈 문자열"""
     if isinstance(desc, str):
-        tokens = desc.strip().split()
+        # 여러 줄을 한 줄로 변환 (모든 줄바꿈 → 공백)
+        desc = re.sub(r"[\r\n]+", " ", desc)
+        # 다중 공백을 하나로 통일
+        desc = re.sub(r"\s+", " ", desc).strip()
+        tokens = desc.split()
         if len(tokens) > 1:
-            return desc.strip()
+            return desc
     return ""
 
 def load_tables_df(tables_xlsx: str) -> pd.DataFrame:
@@ -70,7 +75,8 @@ def load_tables_df(tables_xlsx: str) -> pd.DataFrame:
     df["테이블국문명"] = df["테이블국문명"].astype(str).str.strip()
     df["설명"] = df["설명"].apply(_clean_description)
     # 키워드: NaN -> "" + strip
-    df["키워드"] = df["키워드"].astype(str).fillna("").str.strip()
+    df["키워드"] = df["키워드"].fillna("").astype(str).str.strip()
+    df = df[df["키워드"] == ""].reset_index(drop=True)
     return df
 
 
@@ -113,17 +119,8 @@ def build_column_lists(columns_xlsx: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
       - df_alts:  table_name -> [alt_name]    리스트
     """
     
-    raw = safe_read_columns(columns_path)
+    raw = safe_read_columns(columns_xlsx)
     df = _normalize_columns_df(raw)
-
-    # 원 컬럼명 리스트 (빈 문자열은 제외)
-    df_cols = (
-        df[df["column_name"] != ""]
-        .groupby("table_name")["column_name"]
-        .apply(lambda s: sorted(set(s.tolist())))
-        .reset_index()
-        .rename(columns={"column_name": "columns"})
-    )
 
     # 대체명 리스트 (빈 문자열은 제외)
     df_alts = (
@@ -134,29 +131,21 @@ def build_column_lists(columns_xlsx: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
         .rename(columns={"alt_name": "alt_names"})
     )
 
-    return df_cols, df_alts
+    return df_alts
 
 
 # =========================================
 # 3) 조인: 테이블 메타 + 컬럼/대체명 리스트
 # =========================================
 def join_table_and_columns(
-    tables_df: pd.DataFrame, df_cols: pd.DataFrame, df_alts: pd.DataFrame
+    tables_df: pd.DataFrame, df_alts: pd.DataFrame
 ) -> pd.DataFrame:
-    merged = tables_df.merge(
-        df_cols, left_on="테이블영문명", right_on="table_name", how="left"
-    ).drop(columns=["table_name"], errors="ignore")
 
-    merged = merged.merge(
+    merged = tables_df.merge(
         df_alts, left_on="테이블영문명", right_on="table_name", how="left"
     ).drop(columns=["table_name"], errors="ignore")
 
     # 리스트 필드 기본값
-    if "columns" not in merged.columns:
-        merged["columns"] = [[] for _ in range(len(merged))]
-    else:
-        merged["columns"] = merged["columns"].apply(lambda v: v if isinstance(v, list) else [])
-
     if "alt_names" not in merged.columns:
         merged["alt_names"] = [[] for _ in range(len(merged))]
     else:
@@ -350,9 +339,9 @@ def main(
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     tables_df = load_tables_df(tables_xlsx)
-    df_cols, df_alts = build_column_lists(columns_xlsx)
-    merged = join_table_and_columns(tables_df, df_cols, df_alts)
-
+    df_alts = build_column_lists(columns_xlsx)
+    merged = join_table_and_columns(tables_df, df_alts)
+    merged.to_csv(Path(out_dir)/"merged.csv", index=False)
     print(merged.head())
     return
     # 기본 지시문(원하면 바꾸세요)
